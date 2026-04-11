@@ -1,0 +1,32 @@
+## .NET
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+
+## Blazor WASM
+wwwroot/_framework/
+*.razor.g.cs
+
+## Azure
+local.settings.json
+
+## Secrets
+.env
+.env.*
+!.env.example
+appsettings.local.json
+appsettings.Development.json
+
+## Docker
+docker-compose.override.yml
+
+## OS
+Thumbs.db
+.DS_Store
+
+## Logs e arquivos temporários
+*.txt
+
+## Diagramas rascunho
+*.excalidraw
