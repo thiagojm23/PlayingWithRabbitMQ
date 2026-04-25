@@ -2,9 +2,11 @@
 [Bb]in/
 [Oo]bj/
 .vs/
+.idea/
 .dotnet/
 .nuget/
 *.user
+.codex
 
 ## Blazor WASM
 wwwroot/_framework/

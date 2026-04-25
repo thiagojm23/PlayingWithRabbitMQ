@@ -1,5 +1,6 @@
 using CryptoService.Abstractions;
 using CryptoService.Messages;
+using Microsoft.Data.Sqlite;
 
 namespace CryptoService.Services.ComunicationServices;
 
@@ -71,7 +72,7 @@ internal sealed class SqliteNotificationLogPersistenceService(
     }
 
     private static async Task EnsureSchemaAsync(
-        Microsoft.Data.Sqlite.SqliteConnection connection,
+        SqliteConnection connection,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();

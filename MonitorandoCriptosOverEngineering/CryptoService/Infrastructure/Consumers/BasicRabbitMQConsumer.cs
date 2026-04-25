@@ -9,6 +9,8 @@ internal abstract class BasicRabbitMQConsumer<T, TConsumer>(IConnection connecti
     : IRabbitMqConsumer
     where T : BaseMessage
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     protected readonly IChannel _channel = connection.CreateChannelAsync().GetAwaiter().GetResult();
 
     protected virtual ushort PrefetchCount => 1;
@@ -33,7 +35,7 @@ internal abstract class BasicRabbitMQConsumer<T, TConsumer>(IConnection connecti
             try
             {
                 var body = ea.Body.ToArray();
-                var message = JsonSerializer.Deserialize<T>(body);
+                var message = JsonSerializer.Deserialize<T>(body, JsonOptions);
 
                 if (message == null)
                 {

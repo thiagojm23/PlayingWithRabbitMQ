@@ -3,6 +3,7 @@ using CryptoService.Infrastructure;
 using CryptoService.Infrastructure.Clients;
 using CryptoService.Services;
 using CryptoService.Services.ComunicationServices;
+using CryptoService.Services.JsonAggregation;
 using CryptoService.Settings;
 using RabbitMQ.Client;
 
@@ -24,12 +25,14 @@ builder.Services.AddHttpClient<IBinanceClient, BinanceClient>(client =>
 builder.Services.Configure<GmailSmtpSettings>(builder.Configuration.GetSection(GmailSmtpSettings.SectionName));
 builder.Services.Configure<SmsSandboxSettings>(builder.Configuration.GetSection(SmsSandboxSettings.SectionName));
 builder.Services.Configure<NotificationSqliteSettings>(builder.Configuration.GetSection(NotificationSqliteSettings.SectionName));
+builder.Services.Configure<CreateJsonAggregationSettings>(builder.Configuration.GetSection(CreateJsonAggregationSettings.SectionName));
 builder.Services.AddSingleton<IAnalyzeCriptoService, AnalyzeCrypyoService>();
 builder.Services.AddSingleton<IXlsxCryptoGeneratorService, XlsxCryptoGeneratorService>();
 builder.Services.AddSingleton<IEmailNotificationService, EmailNotificationService>();
 builder.Services.AddSingleton<ISmsNotificationService, SmsNotificationService>();
 builder.Services.AddSingleton<ISqliteConnectionFactory, SqliteConnectionFactory>();
 builder.Services.AddSingleton<INotificationLogPersistenceService, SqliteNotificationLogPersistenceService>();
+builder.Services.AddSingleton<ICreateJsonCryptoAggregationService, SqliteCreateJsonCryptoAggregationService>();
 
 builder.Services.AddRabbitMqTopology(topology => topology
     //Ponta de entrada para solicitações de relatórios.
@@ -49,6 +52,9 @@ builder.Services.AddRabbitMqTopology(topology => topology
     //Fila para montar JSON no front
     //Apenas para praticar - vai ser uma point-to-point
     .WithQueue("create.json.cryptos.queue")
+    .WithExchange("created.json.cryptos.direct", ExchangeType.Direct)
+    .WithQueue("created.json.cryptos.queue")
+    .WithBinding("created.json.cryptos.direct", "created.json.cryptos.queue", "json.cryptos.created")
 
     //Exchange para envio de notificações
     .WithExchange("notify.users.cryptos.topic", ExchangeType.Topic)
@@ -57,7 +63,7 @@ builder.Services.AddRabbitMqTopology(topology => topology
     .WithQueue("notify.save.logs.cryptos.queue")
     .WithBinding("notify.users.cryptos.topic", "notify.email.cryptos.queue", "notify.email.#")
     .WithBinding("notify.users.cryptos.topic", "notify.sms.cryptos.queue", "notify.sms.#")
-    .WithBinding("notify.users.cryptos.topic", "notify.save.logs.cryptos.queue", "notify.#")
+    .WithBinding("notify.users.cryptos.topic", "notify.save.logs.cryptos.queue", "#")
 );
 
 builder.Services.AddRabbitMqConsumers();
