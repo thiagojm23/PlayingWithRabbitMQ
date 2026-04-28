@@ -71,13 +71,9 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
         Guid reportId,
         IReadOnlyDictionary<CreateJsonDataType, CreateJsonPartState> parts)
     {
-        var replyPart = parts.Values.FirstOrDefault(part => !string.IsNullOrWhiteSpace(part.ReplyQueue));
-
         return new CreatedJsonCryptoReport
         {
             ReportId = reportId,
-            RpcCorrelationId = replyPart?.RpcCorrelationId,
-            ReplyQueue = replyPart?.ReplyQueue,
             Price = ParsePayload(parts[CreateJsonDataType.Price].PayloadJson),
             Trade = ParsePayload(parts[CreateJsonDataType.Trade].PayloadJson),
             Spreadsheet = ParsePayload(parts[CreateJsonDataType.Spreadsheet].PayloadJson)
@@ -100,8 +96,6 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
                 report_id TEXT NOT NULL,
                 data_type TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
-                reply_queue TEXT NULL,
-                rpc_correlation_id TEXT NULL,
                 received_at_utc TEXT NOT NULL,
                 PRIMARY KEY (report_id, data_type)
             );
@@ -145,8 +139,6 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
                 report_id,
                 data_type,
                 payload_json,
-                reply_queue,
-                rpc_correlation_id,
                 received_at_utc
             )
             VALUES
@@ -154,22 +146,16 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
                 $reportId,
                 $dataType,
                 $payloadJson,
-                $replyQueue,
-                $rpcCorrelationId,
                 $receivedAtUtc
             )
             ON CONFLICT(report_id, data_type)
             DO UPDATE SET
                 payload_json = excluded.payload_json,
-                reply_queue = COALESCE(excluded.reply_queue, create_json_crypto_parts.reply_queue),
-                rpc_correlation_id = COALESCE(excluded.rpc_correlation_id, create_json_crypto_parts.rpc_correlation_id),
                 received_at_utc = excluded.received_at_utc;
             """;
         command.Parameters.AddWithValue("$reportId", message.ReportId.ToString("D"));
         command.Parameters.AddWithValue("$dataType", dataType.ToString());
         command.Parameters.AddWithValue("$payloadJson", payload);
-        command.Parameters.AddWithValue("$replyQueue", (object?)message.ReplyQueue ?? DBNull.Value);
-        command.Parameters.AddWithValue("$rpcCorrelationId", (object?)message.RpcCorrelationId ?? DBNull.Value);
         command.Parameters.AddWithValue("$receivedAtUtc", DateTime.UtcNow);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -185,7 +171,7 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
         command.Transaction = transaction;
         command.CommandText =
             """
-            SELECT data_type, payload_json, reply_queue, rpc_correlation_id
+            SELECT data_type, payload_json
             FROM create_json_crypto_parts
             WHERE report_id = $reportId;
             """;
@@ -198,10 +184,7 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
         {
             if (Enum.TryParse<CreateJsonDataType>(reader.GetString(0), out var dataType))
             {
-                parts[dataType] = new CreateJsonPartState(
-                    reader.GetString(1),
-                    reader.IsDBNull(2) ? null : reader.GetString(2),
-                    reader.IsDBNull(3) ? null : reader.GetString(3));
+                parts[dataType] = new CreateJsonPartState(reader.GetString(1));
             }
         }
 
@@ -227,7 +210,4 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
     }
 }
 
-internal sealed record CreateJsonPartState(
-    string PayloadJson,
-    string? ReplyQueue,
-    string? RpcCorrelationId);
+internal sealed record CreateJsonPartState(string PayloadJson);

@@ -1,4 +1,3 @@
-using System.IO;
 using CryptoService.Messages;
 using MimeKit;
 

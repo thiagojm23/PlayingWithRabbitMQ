@@ -1,10 +1,12 @@
+using CryptoService.Abstractions;
+
 namespace CryptoService.Infrastructure;
 
 internal static class RabbitMqExtensions
 {
     public static IServiceCollection AddRabbitMqConsumers(this IServiceCollection services)
     {
-        var consumerContractType = typeof(Consumers.IRabbitMqConsumer);
+        var consumerContractType = typeof(IRabbitMqConsumer);
         var consumerTypes = consumerContractType.Assembly
             .GetTypes()
             .Where(type => type is { IsClass: true, IsAbstract: false } && consumerContractType.IsAssignableFrom(type));

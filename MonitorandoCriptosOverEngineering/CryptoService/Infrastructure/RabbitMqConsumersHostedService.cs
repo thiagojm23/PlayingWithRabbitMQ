@@ -1,4 +1,4 @@
-using CryptoService.Infrastructure.Consumers;
+using CryptoService.Abstractions;
 
 namespace CryptoService.Infrastructure;
 

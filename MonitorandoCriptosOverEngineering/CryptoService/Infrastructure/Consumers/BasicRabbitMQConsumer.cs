@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using CryptoService.Abstractions;
 using CryptoService.Messages;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -40,23 +41,23 @@ internal abstract class BasicRabbitMQConsumer<T, TConsumer>(IConnection connecti
                 if (message == null)
                 {
                     logger.LogError("Payload nulo recebido.");
-                    await _channel.BasicRejectAsync(ea.DeliveryTag, requeue: false);
+                    await _channel.BasicRejectAsync(ea.DeliveryTag, requeue: false, cancellationToken: cancellationToken);
                     return;
                 }
 
                 await OnMessageReceived(message);
 
-                if (!AutoAck) await _channel.BasicAckAsync(ea.DeliveryTag, false);
+                if (!AutoAck) await _channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
             }
             catch (JsonException jsonEx)
             {
                 logger.LogError(jsonEx, "Erro de desserialização: {mensagem}", typeof(T));
-                await _channel.BasicNackAsync(ea.DeliveryTag, false, requeue: false);
+                await _channel.BasicNackAsync(ea.DeliveryTag, false, requeue: false, cancellationToken: cancellationToken);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Erro ao processar a mensagem {mensagem}.", typeof(T));
-                await _channel.BasicNackAsync(ea.DeliveryTag, false, requeue: true);
+                await _channel.BasicNackAsync(ea.DeliveryTag, false, requeue: true, cancellationToken: cancellationToken);
             }
         };
 

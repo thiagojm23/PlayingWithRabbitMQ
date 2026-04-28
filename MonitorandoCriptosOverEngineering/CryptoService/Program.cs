@@ -52,9 +52,6 @@ builder.Services.AddRabbitMqTopology(topology => topology
     //Fila para montar JSON no front
     //Apenas para praticar - vai ser uma point-to-point
     .WithQueue("create.json.cryptos.queue")
-    .WithExchange("created.json.cryptos.direct", ExchangeType.Direct)
-    .WithQueue("created.json.cryptos.queue")
-    .WithBinding("created.json.cryptos.direct", "created.json.cryptos.queue", "json.cryptos.created")
 
     //Exchange para envio de notificações
     .WithExchange("notify.users.cryptos.topic", ExchangeType.Topic)

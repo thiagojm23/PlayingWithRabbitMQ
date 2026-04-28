@@ -15,8 +15,6 @@ internal sealed class CreateJsonCryptoPart : BaseMessage
 
     public JsonElement? Data { get; set; }
     public JsonElement? Dados { get; set; }
-    public string? ReplyQueue { get; set; }
-    public string? RpcCorrelationId { get; set; }
 
     public JsonElement? ResolvePayload()
     {

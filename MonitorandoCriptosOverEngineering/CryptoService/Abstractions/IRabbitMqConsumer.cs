@@ -1,4 +1,4 @@
-namespace CryptoService.Infrastructure.Consumers;
+namespace CryptoService.Abstractions;
 
 internal interface IRabbitMqConsumer
 {
