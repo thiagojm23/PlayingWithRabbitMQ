@@ -32,6 +32,7 @@ builder.Services.AddSingleton<IEmailNotificationService, EmailNotificationServic
 builder.Services.AddSingleton<ISmsNotificationService, SmsNotificationService>();
 builder.Services.AddSingleton<ISqliteConnectionFactory, SqliteConnectionFactory>();
 builder.Services.AddSingleton<INotificationLogPersistenceService, SqliteNotificationLogPersistenceService>();
+builder.Services.AddSingleton<IRpcResponseMessagePersistenceService, SqliteRpcResponseMessagePersistenceService>();
 builder.Services.AddSingleton<ICreateJsonCryptoAggregationService, SqliteCreateJsonCryptoAggregationService>();
 
 builder.Services.AddRabbitMqTopology(topology => topology
@@ -52,6 +53,9 @@ builder.Services.AddRabbitMqTopology(topology => topology
     //Fila para montar JSON no front
     //Apenas para praticar - vai ser uma point-to-point
     .WithQueue("create.json.cryptos.queue")
+
+    //Fila para RPC com WASM
+    .WithQueue("receive.json.cryptos.queue")
 
     //Exchange para envio de notificações
     .WithExchange("notify.users.cryptos.topic", ExchangeType.Topic)

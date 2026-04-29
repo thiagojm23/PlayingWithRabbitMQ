@@ -1,11 +1,14 @@
 ﻿using System.Text.Json;
 using CryptoService.Abstractions;
+using CryptoService.Contracts;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 namespace CryptoService.Infrastructure;
 
-internal sealed class Publisher(IConnection connection, ILogger<Publisher> logger) : IPublisher, IAsyncDisposable
+internal sealed class Publisher(
+    IConnection connection,
+    ILogger<Publisher> logger) : IPublisher, IAsyncDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan DefaultRpcTimeout = TimeSpan.FromSeconds(2);
@@ -61,7 +64,7 @@ internal sealed class Publisher(IConnection connection, ILogger<Publisher> logge
         }
     }
 
-    public async Task<TResponse> PublishRpcMessageAsync<TRequest, TResponse>(
+    public async Task<RpcPublishResponse<TResponse>> PublishRpcMessageAsync<TRequest, TResponse>(
         string queue,
         TRequest message,
         string replyQueueBaseName,
@@ -139,7 +142,14 @@ internal sealed class Publisher(IConnection connection, ILogger<Publisher> logge
 
             try
             {
-                return await responseCompletion.Task.WaitAsync(timeoutCts.Token);
+                var rpcReturn = await responseCompletion.Task.WaitAsync(timeoutCts.Token);
+                return new RpcPublishResponse<TResponse>
+                {
+                    CorrelationId = correlationId,
+                    ReplyQueueName = replyQueueName,
+                    RpcRequestQueue = queue,
+                    RpcReturn = rpcReturn
+                };
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {

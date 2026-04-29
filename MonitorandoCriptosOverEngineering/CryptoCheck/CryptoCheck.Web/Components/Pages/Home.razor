@@ -1,7 +1,388 @@
-﻿@page "/"
+@page "/"
+@rendermode InteractiveServer
+@implements IDisposable
+@inject BinanceCryptoCatalogClient BinanceClient
+@inject CryptoReportRequestPublisher RequestPublisher
+@inject CryptoReportInbox ReportInbox
 
-<PageTitle>Home</PageTitle>
+<PageTitle>CryptoCheck</PageTitle>
 
-<h1>Hello, world!</h1>
+<main class="dashboard @(isDarkTheme ? "theme-dark" : "theme-light")">
+    <section class="hero">
+        <div>
+            <p class="eyebrow">CryptoCheck</p>
+            <h1>Relatorios de trade e price dos ultimos 7 dias.</h1>
+            <p class="hero-copy">
+                Selecione os pares negociados na Binance, escolha como quer ser avisado e aguarde o retorno RPC do CryptoService.
+            </p>
+        </div>
 
-Welcome to your new app.
+        <button class="theme-toggle" type="button" @onclick="ToggleTheme">
+            @(isDarkTheme ? "Tema light" : "Tema dark")
+        </button>
+    </section>
+
+    <section class="panel">
+        <div class="panel-heading">
+            <div>
+                <span class="section-kicker">Configuracao</span>
+                <h2>Monte seu relatorio</h2>
+            </div>
+            <span class="fixed-range">Periodo fixo: 7 dias</span>
+        </div>
+
+        <div class="grid">
+            <div class="field-block">
+                <label for="cryptoFilter">Criptomoedas</label>
+                <input id="cryptoFilter"
+                       class="control"
+                       placeholder="Filtre por codigo ou nome"
+                       @bind="cryptoFilter"
+                       @bind:event="oninput" />
+
+                <div class="select-list" role="listbox" aria-label="Criptomoedas disponiveis">
+                    @if (isLoadingCryptos)
+                    {
+                        <div class="empty-state">Carregando ativos da Binance...</div>
+                    }
+                    else if (FilteredCryptos.Count == 0)
+                    {
+                        <div class="empty-state">Nenhuma cripto encontrada.</div>
+                    }
+                    else
+                    {
+                        @foreach (var crypto in FilteredCryptos.Take(80))
+                        {
+                            var selected = IsSelected(crypto.Symbol);
+                            <button class="crypto-option @(selected ? "is-disabled" : null)"
+                                    type="button"
+                                    disabled="@selected"
+                                    @onclick="() => SelectCrypto(crypto)">
+                                <strong>@crypto.Code</strong>
+                                <span>@crypto.Name</span>
+                                <small>@crypto.Symbol</small>
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="field-block">
+                <label>Selecionadas</label>
+                <div class="selected-list">
+                    @if (selectedCryptos.Count == 0)
+                    {
+                        <span class="empty-state">Escolha uma ou mais criptos.</span>
+                    }
+                    else
+                    {
+                        @foreach (var crypto in selectedCryptos)
+                        {
+                            <button class="chip" type="button" @onclick="() => RemoveCrypto(crypto.Symbol)">
+                                @crypto.Code <span>remover</span>
+                            </button>
+                        }
+                    }
+                </div>
+
+                <div class="field-block nested">
+                    <label>Canal de aviso</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="notify" checked="@(notificationMode == NotificationMode.Email)" @onchange="() => SetNotificationMode(NotificationMode.Email)" /> E-mail</label>
+                        <label><input type="radio" name="notify" checked="@(notificationMode == NotificationMode.Sms)" @onchange="() => SetNotificationMode(NotificationMode.Sms)" /> SMS</label>
+                        <label><input type="radio" name="notify" checked="@(notificationMode == NotificationMode.Both)" @onchange="() => SetNotificationMode(NotificationMode.Both)" /> Ambos</label>
+                    </div>
+                </div>
+
+                @if (NeedsEmail)
+                {
+                    <div class="field-block nested">
+                        <label for="email">E-mail</label>
+                        <input id="email" class="control" type="email" placeholder="voce@dominio.com" @bind="email" @bind:event="oninput" />
+                    </div>
+                }
+
+                @if (NeedsPhone)
+                {
+                    <div class="field-block nested">
+                        <label for="phone">SMS</label>
+                        <input id="phone" class="control" type="tel" placeholder="+5511999999999" @bind="phone" @bind:event="oninput" />
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(validationMessage))
+                {
+                    <p class="validation">@validationMessage</p>
+                }
+
+                <button class="primary-action" type="button" disabled="@isSubmitting" @onclick="RequestReportAsync">
+                    @(isSubmitting ? "Aguardando relatorio..." : "Solicitar relatorio")
+                </button>
+            </div>
+        </div>
+    </section>
+
+    @if (completedReport is not null)
+    {
+        <section class="results">
+            <article class="result-card">
+                <span>Price</span>
+                <strong>@GetWorkbookTitle(completedReport.Price)</strong>
+                <small>@GetRowCount(completedReport.Price) linhas consolidadas</small>
+            </article>
+            <article class="result-card">
+                <span>Trade</span>
+                <strong>@GetWorkbookTitle(completedReport.Trade)</strong>
+                <small>@GetRowCount(completedReport.Trade) linhas consolidadas</small>
+            </article>
+            <article class="result-card accent-card">
+                <span>Planilha</span>
+                <strong>@GetSpreadsheetFileName(completedReport.Spreadsheet)</strong>
+                <a class="download-link" href="@BuildSpreadsheetDataUrl(completedReport.Spreadsheet)" download="@GetSpreadsheetFileName(completedReport.Spreadsheet)">Baixar XLSX</a>
+            </article>
+        </section>
+    }
+</main>
+
+@if (pendingReport is not null)
+{
+    <div class="modal-backdrop">
+        <section class="rpc-modal" role="dialog" aria-modal="true" aria-labelledby="rpcTitle">
+            <span class="timer">@secondsLeft.ToString("00")s</span>
+            <h2 id="rpcTitle">Confirme o recebimento</h2>
+            <p>Escreva uma mensagem com pelo menos 3 caracteres para retornar ao CryptoService e salvar nos logs.</p>
+            <textarea class="control modal-input" @bind="rpcMessage" @bind:event="oninput" placeholder="Ex: relatorio recebido"></textarea>
+            @if (!string.IsNullOrWhiteSpace(rpcValidation))
+            {
+                <p class="validation">@rpcValidation</p>
+            }
+            <button class="primary-action" type="button" @onclick="CompleteRpcAsync">Enviar retorno RPC</button>
+        </section>
+    </div>
+}
+
+@code {
+    private readonly List<CryptoOption> selectedCryptos = [];
+    private IReadOnlyList<CryptoOption> cryptos = [];
+    private string cryptoFilter = string.Empty;
+    private string email = string.Empty;
+    private string phone = string.Empty;
+    private string rpcMessage = string.Empty;
+    private string? validationMessage;
+    private string? rpcValidation;
+    private bool isDarkTheme = true;
+    private bool isLoadingCryptos = true;
+    private bool isSubmitting;
+    private int secondsLeft = 10;
+    private NotificationMode notificationMode = NotificationMode.Email;
+    private PendingCryptoReport? pendingReport;
+    private PendingCryptoReport? completedReport;
+    private CancellationTokenSource? modalTimerCts;
+
+    private bool NeedsEmail => notificationMode is NotificationMode.Email or NotificationMode.Both;
+    private bool NeedsPhone => notificationMode is NotificationMode.Sms or NotificationMode.Both;
+
+    private IReadOnlyList<CryptoOption> FilteredCryptos => cryptos
+        .Where(crypto => string.IsNullOrWhiteSpace(cryptoFilter)
+            || crypto.Code.Contains(cryptoFilter, StringComparison.OrdinalIgnoreCase)
+            || crypto.Name.Contains(cryptoFilter, StringComparison.OrdinalIgnoreCase)
+            || crypto.Symbol.Contains(cryptoFilter, StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            cryptos = await BinanceClient.GetTradableUsdtCryptosAsync();
+        }
+        catch
+        {
+            validationMessage = "Nao foi possivel carregar a lista da Binance agora.";
+        }
+        finally
+        {
+            isLoadingCryptos = false;
+        }
+    }
+
+    private void ToggleTheme() => isDarkTheme = !isDarkTheme;
+
+    private void SelectCrypto(CryptoOption crypto)
+    {
+        if (!IsSelected(crypto.Symbol))
+        {
+            selectedCryptos.Add(crypto);
+        }
+    }
+
+    private void RemoveCrypto(string symbol) =>
+        selectedCryptos.RemoveAll(crypto => crypto.Symbol == symbol);
+
+    private bool IsSelected(string symbol) =>
+        selectedCryptos.Any(crypto => crypto.Symbol == symbol);
+
+    private void SetNotificationMode(NotificationMode mode)
+    {
+        notificationMode = mode;
+        validationMessage = null;
+    }
+
+    private async Task RequestReportAsync()
+    {
+        validationMessage = ValidateRequest();
+
+        if (validationMessage is not null)
+        {
+            return;
+        }
+
+        isSubmitting = true;
+        completedReport = null;
+
+        try
+        {
+            var reportId = await RequestPublisher.PublishAsync(new CryptoReportRequest(
+                selectedCryptos.Select(crypto => crypto.Symbol).ToArray(),
+                NeedsEmail,
+                NeedsPhone,
+                NeedsEmail ? email : null,
+                NeedsPhone ? phone : null));
+
+            pendingReport = await ReportInbox.WaitForReportAsync(reportId, TimeSpan.FromMinutes(3));
+            StartModalTimer();
+        }
+        catch (TimeoutException)
+        {
+            validationMessage = "O relatorio nao retornou dentro do tempo esperado.";
+        }
+        catch
+        {
+            validationMessage = "Nao foi possivel solicitar o relatorio. Verifique o RabbitMQ e tente novamente.";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private string? ValidateRequest()
+    {
+        if (selectedCryptos.Count == 0)
+        {
+            return "Selecione pelo menos uma cripto.";
+        }
+
+        if (NeedsEmail && !new System.ComponentModel.DataAnnotations.EmailAddressAttribute().IsValid(email))
+        {
+            return "Informe um e-mail valido.";
+        }
+
+        if (NeedsPhone && !System.Text.RegularExpressions.Regex.IsMatch(phone, @"^\+?[0-9]{10,15}$"))
+        {
+            return "Informe um telefone com DDI/DDD e 10 a 15 digitos.";
+        }
+
+        return null;
+    }
+
+    private void StartModalTimer()
+    {
+        modalTimerCts?.Cancel();
+        modalTimerCts = new CancellationTokenSource();
+        _ = RunModalTimerAsync(modalTimerCts.Token);
+    }
+
+    private async Task RunModalTimerAsync(CancellationToken cancellationToken)
+    {
+        secondsLeft = 10;
+
+        while (secondsLeft > 0 && !cancellationToken.IsCancellationRequested)
+        {
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ContinueWith(_ => { }, CancellationToken.None);
+            secondsLeft--;
+        }
+
+        if (!cancellationToken.IsCancellationRequested && pendingReport is not null)
+        {
+            pendingReport = null;
+            rpcMessage = string.Empty;
+            rpcValidation = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task CompleteRpcAsync()
+    {
+        if (pendingReport is null)
+        {
+            return;
+        }
+
+        if (rpcMessage.Trim().Length < 3)
+        {
+            rpcValidation = "A mensagem precisa ter pelo menos 3 caracteres.";
+            return;
+        }
+
+        try
+        {
+            await ReportInbox.CompleteAsync(pendingReport.ReportId, rpcMessage.Trim());
+            completedReport = pendingReport;
+            pendingReport = null;
+            rpcMessage = string.Empty;
+            rpcValidation = null;
+            modalTimerCts?.Cancel();
+        }
+        catch
+        {
+            rpcValidation = "Nao foi possivel responder o RPC antes do timeout.";
+        }
+    }
+
+    private static string GetWorkbookTitle(JsonElement element) =>
+        element.TryGetProperty("workbookTitle", out var title)
+            ? title.GetString() ?? "Relatorio"
+            : "Relatorio";
+
+    private static int GetRowCount(JsonElement element)
+    {
+        if (!element.TryGetProperty("worksheets", out var worksheets) || worksheets.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        return worksheets.EnumerateArray()
+            .SelectMany(worksheet => worksheet.TryGetProperty("sections", out var sections) && sections.ValueKind == JsonValueKind.Array
+                ? sections.EnumerateArray()
+                : [])
+            .Sum(section => section.TryGetProperty("rows", out var rows) && rows.ValueKind == JsonValueKind.Array ? rows.GetArrayLength() : 0);
+    }
+
+    private static string GetSpreadsheetFileName(JsonElement element) =>
+        element.TryGetProperty("fileName", out var fileName)
+            ? fileName.GetString() ?? "relatorio-criptos.xlsx"
+            : "relatorio-criptos.xlsx";
+
+    private static string BuildSpreadsheetDataUrl(JsonElement element)
+    {
+        var content = element.TryGetProperty("content", out var contentElement)
+            ? contentElement.GetString()
+            : null;
+
+        return $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{content}";
+    }
+
+    public void Dispose()
+    {
+        modalTimerCts?.Cancel();
+        modalTimerCts?.Dispose();
+    }
+
+    private enum NotificationMode
+    {
+        Email,
+        Sms,
+        Both
+    }
+}

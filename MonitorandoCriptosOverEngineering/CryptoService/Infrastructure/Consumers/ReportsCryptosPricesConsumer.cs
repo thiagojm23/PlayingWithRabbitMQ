@@ -21,6 +21,10 @@ internal class ReportsCryptosPricesConsumer(IPublisher publisher,
         createXlsxMessage.RecipientPhoneNumber = message.RecipientPhoneNumber;
 
         await publisher.PublishMessageAsync(
+            "create.json.cryptos.queue",
+            createXlsxMessage.CreateJsonPart("Price"));
+
+        await publisher.PublishMessageAsync(
             createXlsxMessage.ExchangeName,
             "xlsx.cryptos",
             createXlsxMessage);

@@ -1,7 +1,11 @@
+using System.Text.Json;
+
 namespace CryptoService.Messages;
 
 internal sealed class CreateXlsxCrypto : BaseMessage
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     public override string ExchangeName => "create.docs.cryptos.direct";
 
     public string WorkbookTitle { get; set; } = string.Empty;
@@ -14,6 +18,34 @@ internal sealed class CreateXlsxCrypto : BaseMessage
     public string? RecipientEmail { get; set; }
     public string? RecipientPhoneNumber { get; set; }
     public List<XlsxWorksheetDefinition> Worksheets { get; set; } = [];
+
+    public CreateJsonCryptoPart CreateJsonPart(string dataType)
+    {
+        return new CreateJsonCryptoPart
+        {
+            ReportId = SourceMessageId == Guid.Empty ? MessageId : SourceMessageId,
+            DataType = dataType,
+            Data = JsonSerializer.SerializeToElement(this, JsonOptions)
+        };
+    }
+
+    public CreateJsonCryptoPart CreateSpreadsheetJsonPart(byte[] content)
+    {
+        var generatedMessage = new XlsxCryptoGenerated
+        {
+            SourceCreateMessageId = MessageId,
+            WorkbookTitle = WorkbookTitle,
+            FileName = FileName,
+            Content = content
+        };
+
+        return new CreateJsonCryptoPart
+        {
+            ReportId = SourceMessageId == Guid.Empty ? MessageId : SourceMessageId,
+            DataType = "Spreadsheet",
+            Data = JsonSerializer.SerializeToElement(generatedMessage, JsonOptions)
+        };
+    }
 }
 
 internal sealed class XlsxWorksheetDefinition

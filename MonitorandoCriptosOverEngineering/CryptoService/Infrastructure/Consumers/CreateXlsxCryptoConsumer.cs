@@ -25,9 +25,13 @@ internal sealed class CreateXlsxCryptoConsumer : BasicRabbitMQConsumer<CreateXls
     protected override async Task OnMessageReceived(CreateXlsxCrypto message)
     {
         var content = await _xlsxCryptoGeneratorService.GenerateAsync(message);
-        var publishContext = CreatePublishContext(message, content);
+        var spreadsheetJsonPart = message.CreateSpreadsheetJsonPart(content);
 
-        if (publishContext is null)
+        await _publisher.PublishMessageAsync("create.json.cryptos.queue", spreadsheetJsonPart);
+
+        var publishContexts = CreatePublishContexts(message, content);
+
+        if (publishContexts.Count == 0)
         {
             _logger.LogWarning(
                 "Nenhuma notificacao valida foi configurada para o relatorio {ReportType}.",
@@ -35,27 +39,34 @@ internal sealed class CreateXlsxCryptoConsumer : BasicRabbitMQConsumer<CreateXls
             return;
         }
 
-        await _publisher.PublishMessageAsync(
-            publishContext.Message.ExchangeName,
-            publishContext.RoutingKey,
-            publishContext.Message);
+        foreach (var publishContext in publishContexts)
+        {
+            await _publisher.PublishMessageAsync(
+                publishContext.Message.ExchangeName,
+                publishContext.RoutingKey,
+                publishContext.Message);
+        }
     }
 
-    private NotificationPublishContext? CreatePublishContext(CreateXlsxCrypto message, byte[] content)
+    private static List<NotificationPublishContext> CreatePublishContexts(CreateXlsxCrypto message, byte[] content)
     {
-        switch (message.NotifyByEmail, message.NotifyBySms)
+        var contexts = new List<NotificationPublishContext>();
+
+        if (message.NotifyByEmail && !string.IsNullOrWhiteSpace(message.RecipientEmail))
         {
-            case (true, false) when !string.IsNullOrWhiteSpace(message.RecipientEmail):
-                return new NotificationPublishContext(
-                    CreateEmailNotification(message, content),
-                    BuildRoutingKey("email", message.ReportType));
-            case (false, true) when !string.IsNullOrWhiteSpace(message.RecipientPhoneNumber):
-                return new NotificationPublishContext(
-                    CreateSmsNotification(message, content),
-                    BuildRoutingKey("sms", message.ReportType));
-            default:
-                return null;
+            contexts.Add(new NotificationPublishContext(
+                CreateEmailNotification(message, content),
+                BuildRoutingKey("email", message.ReportType)));
         }
+
+        if (message.NotifyBySms && !string.IsNullOrWhiteSpace(message.RecipientPhoneNumber))
+        {
+            contexts.Add(new NotificationPublishContext(
+                CreateSmsNotification(message, content),
+                BuildRoutingKey("sms", message.ReportType)));
+        }
+
+        return contexts;
     }
 
     private static NotifyEmailCryptoReport CreateEmailNotification(CreateXlsxCrypto message, byte[] content)

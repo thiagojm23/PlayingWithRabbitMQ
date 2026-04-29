@@ -22,6 +22,10 @@ internal class ReportsCryptosTradesConsumer(
         createXlsxMessage.RecipientPhoneNumber = message.RecipientPhoneNumber;
 
         await publisher.PublishMessageAsync(
+            "create.json.cryptos.queue",
+            createXlsxMessage.CreateJsonPart("Trade"));
+
+        await publisher.PublishMessageAsync(
             createXlsxMessage.ExchangeName,
             "xlsx.cryptos",
             createXlsxMessage);

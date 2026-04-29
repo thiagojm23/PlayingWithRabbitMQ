@@ -1,6 +1,3 @@
 <Solution>
-  <Project Path="CryptoCheck.ApiService/CryptoCheck.ApiService.csproj" />
-  <Project Path="CryptoCheck.AppHost/CryptoCheck.AppHost.csproj" />
-  <Project Path="CryptoCheck.ServiceDefaults/CryptoCheck.ServiceDefaults.csproj" />
   <Project Path="CryptoCheck.Web/CryptoCheck.Web.csproj" />
 </Solution>
