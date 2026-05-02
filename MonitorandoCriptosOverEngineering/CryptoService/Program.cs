@@ -9,6 +9,7 @@ using RabbitMQ.Client;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddUserSecrets<Program>(optional: true);
+builder.AddServiceDefaults();
 
 builder.Services.AddSingleton<IConnection>(_ =>
 {

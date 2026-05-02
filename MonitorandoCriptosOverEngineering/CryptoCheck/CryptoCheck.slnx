@@ -1,3 +1,6 @@
 <Solution>
+  <Project Path="CryptoCheck.AppHost/CryptoCheck.AppHost.csproj" />
+  <Project Path="CryptoCheck.ServiceDefaults/CryptoCheck.ServiceDefaults.csproj" />
   <Project Path="CryptoCheck.Web/CryptoCheck.Web.csproj" />
+  <Project Path="../CryptoService/CryptoService.csproj" />
 </Solution>
