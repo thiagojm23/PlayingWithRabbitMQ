@@ -59,8 +59,8 @@
                                     disabled="@selected"
                                     @onclick="() => SelectCrypto(crypto)">
                                 <strong>@crypto.Code</strong>
-                                <span>@crypto.Name</span>
-                                <small>@crypto.Symbol</small>
+                                <span class="crypto-name">@crypto.Name</span>
+                                <small class="crypto-symbol">@crypto.Symbol</small>
                             </button>
                         }
                     }
@@ -127,17 +127,64 @@
         <section class="results">
             <article class="result-card">
                 <span>Price</span>
-                <strong>@GetWorkbookTitle(completedReport.Price)</strong>
-                <small>@GetRowCount(completedReport.Price) linhas consolidadas</small>
+                <strong>@GetPreviewTitle(completedReport.PricePreview, completedReport.Price, "Relatorio de precos")</strong>
+                <small>@GetRowCount(completedReport.PricePreview, completedReport.PriceRowCount, completedReport.Price) linhas consolidadas</small>
+                <p class="result-subtitle">@GetPreviewSubtitle(completedReport.PricePreview)</p>
+                <div class="result-metrics">
+                    @foreach (var metric in GetPreviewMetrics(completedReport.PricePreview))
+                    {
+                        <div class="metric-pill">
+                            <span>@metric.Label</span>
+                            <strong>@metric.Value</strong>
+                        </div>
+                    }
+                </div>
+                <div class="spotlight-list">
+                    @foreach (var item in GetPreviewSpotlight(completedReport.PricePreview))
+                    {
+                        <article class="spotlight-item">
+                            <strong>@item.Label</strong>
+                            <p>@item.PrimaryValue</p>
+                            @if (!string.IsNullOrWhiteSpace(item.SecondaryValue))
+                            {
+                                <small>@item.SecondaryValue</small>
+                            }
+                        </article>
+                    }
+                </div>
             </article>
             <article class="result-card">
                 <span>Trade</span>
-                <strong>@GetWorkbookTitle(completedReport.Trade)</strong>
-                <small>@GetRowCount(completedReport.Trade) linhas consolidadas</small>
+                <strong>@GetPreviewTitle(completedReport.TradePreview, completedReport.Trade, "Relatorio de trades")</strong>
+                <small>@GetRowCount(completedReport.TradePreview, completedReport.TradeRowCount, completedReport.Trade) linhas consolidadas</small>
+                <p class="result-subtitle">@GetPreviewSubtitle(completedReport.TradePreview)</p>
+                <div class="result-metrics">
+                    @foreach (var metric in GetPreviewMetrics(completedReport.TradePreview))
+                    {
+                        <div class="metric-pill">
+                            <span>@metric.Label</span>
+                            <strong>@metric.Value</strong>
+                        </div>
+                    }
+                </div>
+                <div class="spotlight-list">
+                    @foreach (var item in GetPreviewSpotlight(completedReport.TradePreview))
+                    {
+                        <article class="spotlight-item">
+                            <strong>@item.Label</strong>
+                            <p>@item.PrimaryValue</p>
+                            @if (!string.IsNullOrWhiteSpace(item.SecondaryValue))
+                            {
+                                <small>@item.SecondaryValue</small>
+                            }
+                        </article>
+                    }
+                </div>
             </article>
             <article class="result-card accent-card">
                 <span>Planilha</span>
                 <strong>@GetSpreadsheetFileName(completedReport.Spreadsheet)</strong>
+                <p class="result-subtitle">Relatorio consolidado em XLSX com as abas de price e trade prontas para download.</p>
                 <a class="download-link" href="@BuildSpreadsheetDataUrl(completedReport.Spreadsheet)" download="@GetSpreadsheetFileName(completedReport.Spreadsheet)">Baixar XLSX</a>
             </article>
         </section>
@@ -345,7 +392,36 @@
             ? title.GetString() ?? "Relatorio"
             : "Relatorio";
 
-    private static int GetRowCount(JsonElement element)
+    private static string GetPreviewTitle(ReportPreviewSummary? preview, JsonElement element, string fallback) =>
+        string.IsNullOrWhiteSpace(preview?.Title)
+            ? (GetWorkbookTitle(element) is { Length: > 0 } workbookTitle ? workbookTitle : fallback)
+            : preview.Title;
+
+    private static string GetPreviewSubtitle(ReportPreviewSummary? preview) =>
+        preview?.Subtitle ?? string.Empty;
+
+    private static IReadOnlyList<ReportPreviewMetric> GetPreviewMetrics(ReportPreviewSummary? preview) =>
+        preview?.Metrics.Take(4).ToArray() ?? [];
+
+    private static IReadOnlyList<ReportPreviewSpotlightItem> GetPreviewSpotlight(ReportPreviewSummary? preview) =>
+        preview?.Spotlight.Take(3).ToArray() ?? [];
+
+    private static int GetRowCount(ReportPreviewSummary? preview, int explicitRowCount, JsonElement element)
+    {
+        if (preview is not null)
+        {
+            return preview.ConsolidatedRowCount;
+        }
+
+        if (explicitRowCount > 0)
+        {
+            return explicitRowCount;
+        }
+
+        return GetLegacyRowCount(element);
+    }
+
+    private static int GetLegacyRowCount(JsonElement element)
     {
         if (!element.TryGetProperty("worksheets", out var worksheets) || worksheets.ValueKind != JsonValueKind.Array)
         {

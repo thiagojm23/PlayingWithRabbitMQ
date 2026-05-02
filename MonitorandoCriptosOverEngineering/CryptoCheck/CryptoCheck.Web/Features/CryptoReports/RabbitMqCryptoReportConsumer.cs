@@ -52,6 +52,10 @@ public sealed class RabbitMqCryptoReportConsumer(
 
             await inbox.ReceiveAsync(new PendingCryptoReport(
                 message.ReportId,
+                message.PriceRowCount,
+                message.TradeRowCount,
+                message.PricePreview,
+                message.TradePreview,
                 message.Price.Clone(),
                 message.Trade.Clone(),
                 message.Spreadsheet.Clone(),
@@ -80,6 +84,10 @@ public sealed class RabbitMqCryptoReportConsumer(
 
     private sealed record CreatedJsonCryptoReportMessage(
         Guid ReportId,
+        int PriceRowCount,
+        int TradeRowCount,
+        ReportPreviewSummary? PricePreview,
+        ReportPreviewSummary? TradePreview,
         JsonElement Price,
         JsonElement Trade,
         JsonElement Spreadsheet);

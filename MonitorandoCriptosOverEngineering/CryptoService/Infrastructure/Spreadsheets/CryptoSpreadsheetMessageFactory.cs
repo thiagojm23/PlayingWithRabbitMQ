@@ -1,3 +1,5 @@
+using System.Globalization;
+using CryptoService.Contracts;
 using CryptoService.Messages;
 
 namespace CryptoService.Infrastructure.Spreadsheets;
@@ -20,6 +22,7 @@ internal static class CryptoSpreadsheetMessageFactory
             WorkbookTitle = "Relatorio de precos de criptomoedas",
             FileName = $"relatorio-precos-criptos-{generatedAt:yyyyMMdd-HHmmss}.xlsx",
             Description = "Consolidado dos ultimos 7 candles diarios (1d) retornados pela Binance. Datas em UTC.",
+            PreviewSummary = BuildPricePreviewSummary(cryptos, orderedRows),
             Worksheets =
             [
                 new XlsxWorksheetDefinition
@@ -85,6 +88,7 @@ internal static class CryptoSpreadsheetMessageFactory
             WorkbookTitle = "Relatorio de trades de criptomoedas",
             FileName = $"relatorio-trades-criptos-{generatedAt:yyyyMMdd-HHmmss}.xlsx",
             Description = "Consolidado dos trades recentes retornados pela Binance. Horarios em UTC.",
+            PreviewSummary = BuildTradePreviewSummary(cryptos, orderedRows, tradesPerCrypto),
             Worksheets =
             [
                 new XlsxWorksheetDefinition
@@ -149,6 +153,81 @@ internal static class CryptoSpreadsheetMessageFactory
         }
 
         return sections;
+    }
+
+    private static ReportPreviewSummary BuildPricePreviewSummary(
+        IReadOnlyCollection<string> cryptos,
+        IReadOnlyList<PriceSpreadsheetRow> orderedRows)
+    {
+        var latestDay = orderedRows.Count == 0
+            ? (DateTime?)null
+            : orderedRows.Max(row => row.Day);
+        var spotlight = latestDay is null
+            ? []
+            : orderedRows
+                .Where(row => row.Day == latestDay.Value)
+                .OrderByDescending(row => Math.Abs(row.VariationPct))
+                .ThenBy(row => row.Symbol)
+                .Take(3)
+                .Select(row => new ReportPreviewSpotlightItem
+                {
+                    Label = row.Symbol,
+                    PrimaryValue = $"Fechamento {FormatDecimal(row.Close)}",
+                    SecondaryValue = $"Variacao {FormatPercent(row.VariationPct)} em {row.Day:dd/MM/yyyy}"
+                })
+                .ToList();
+
+        return new ReportPreviewSummary
+        {
+            Title = "Preview de precos",
+            Subtitle = $"Ultimos 7 candles diarios consolidados para {cryptos.Count} cripto(s).",
+            RequestedCryptos = cryptos.Count,
+            ConsolidatedRowCount = orderedRows.Count,
+            Metrics =
+            [
+                CreateMetric("Ultimo dia consolidado", latestDay?.ToString("dd/MM/yyyy") ?? "Sem dados"),
+                CreateMetric("Maior maxima", orderedRows.Count == 0 ? "0" : FormatDecimal(orderedRows.Max(row => row.High))),
+                CreateMetric("Menor minima", orderedRows.Count == 0 ? "0" : FormatDecimal(orderedRows.Min(row => row.Low))),
+                CreateMetric("Media do fechamento", orderedRows.Count == 0 ? "0" : FormatDecimal(orderedRows.Average(row => row.Close))),
+                CreateMetric("Volume total", FormatDecimal(orderedRows.Sum(row => row.Volume)))
+            ],
+            Spotlight = spotlight
+        };
+    }
+
+    private static ReportPreviewSummary BuildTradePreviewSummary(
+        IReadOnlyCollection<string> cryptos,
+        IReadOnlyList<TradeSpreadsheetRow> orderedRows,
+        int tradesPerCrypto)
+    {
+        return new ReportPreviewSummary
+        {
+            Title = "Preview de trades",
+            Subtitle = $"Amostra consolidada dos ultimos {tradesPerCrypto} trades por cripto.",
+            RequestedCryptos = cryptos.Count,
+            ConsolidatedRowCount = orderedRows.Count,
+            Metrics =
+            [
+                CreateMetric("Ultimo trade UTC", orderedRows.Count == 0 ? "Sem dados" : orderedRows.Max(row => row.TradeTimeUtc).ToString("dd/MM/yyyy HH:mm:ss")),
+                CreateMetric("Preco medio", orderedRows.Count == 0 ? "0" : FormatDecimal(orderedRows.Average(row => row.Price))),
+                CreateMetric("Quantidade total", FormatDecimal(orderedRows.Sum(row => row.Quantity))),
+                CreateMetric("Valor cotado total", FormatDecimal(orderedRows.Sum(row => row.QuoteQuantity))),
+                CreateMetric("Agressao compradora", orderedRows.Count(row => row.AggressorSide == "Compra agressora").ToString(CultureInfo.InvariantCulture)),
+                CreateMetric("Agressao vendedora", orderedRows.Count(row => row.AggressorSide == "Venda agressora").ToString(CultureInfo.InvariantCulture))
+            ],
+            Spotlight = orderedRows
+                .GroupBy(row => row.Symbol)
+                .OrderByDescending(group => group.Count())
+                .ThenBy(group => group.Key)
+                .Take(3)
+                .Select(group => new ReportPreviewSpotlightItem
+                {
+                    Label = group.Key,
+                    PrimaryValue = $"{group.Count().ToString(CultureInfo.InvariantCulture)} trade(s)",
+                    SecondaryValue = $"Ultimo em {group.Max(row => row.TradeTimeUtc):dd/MM/yyyy HH:mm:ss} UTC"
+                })
+                .ToList()
+        };
     }
 
     private static List<XlsxColumnDefinition> CreatePriceColumns()
@@ -276,6 +355,21 @@ internal static class CryptoSpreadsheetMessageFactory
             TextValue = format
         };
     }
+
+    private static ReportPreviewMetric CreateMetric(string label, string value)
+    {
+        return new()
+        {
+            Label = label,
+            Value = value
+        };
+    }
+
+    private static string FormatDecimal(decimal value) =>
+        value.ToString("#,##0.########", CultureInfo.InvariantCulture);
+
+    private static string FormatPercent(decimal value) =>
+        value.ToString("+0.00%;-0.00%;0.00%", CultureInfo.InvariantCulture);
 }
 
 internal sealed record PriceSpreadsheetRow(

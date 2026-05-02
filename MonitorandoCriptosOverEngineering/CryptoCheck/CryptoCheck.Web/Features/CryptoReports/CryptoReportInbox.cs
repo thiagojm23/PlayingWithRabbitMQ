@@ -71,9 +71,30 @@ public sealed class CryptoReportInbox(IConnection connection, ILogger<CryptoRepo
 
 public sealed record PendingCryptoReport(
     Guid ReportId,
+    int PriceRowCount,
+    int TradeRowCount,
+    ReportPreviewSummary? PricePreview,
+    ReportPreviewSummary? TradePreview,
     JsonElement Price,
     JsonElement Trade,
     JsonElement Spreadsheet,
     string ReplyTo,
     string CorrelationId,
     DateTime ReceivedAtUtc);
+
+public sealed record ReportPreviewSummary(
+    string Title,
+    string Subtitle,
+    int RequestedCryptos,
+    int ConsolidatedRowCount,
+    IReadOnlyList<ReportPreviewMetric> Metrics,
+    IReadOnlyList<ReportPreviewSpotlightItem> Spotlight);
+
+public sealed record ReportPreviewMetric(
+    string Label,
+    string Value);
+
+public sealed record ReportPreviewSpotlightItem(
+    string Label,
+    string PrimaryValue,
+    string? SecondaryValue);

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CryptoService.Contracts;
 
 namespace CryptoService.Messages;
 
@@ -17,6 +18,7 @@ internal sealed class CreateXlsxCrypto : BaseMessage
     public bool NotifyBySms { get; set; }
     public string? RecipientEmail { get; set; }
     public string? RecipientPhoneNumber { get; set; }
+    public ReportPreviewSummary? PreviewSummary { get; set; }
     public List<XlsxWorksheetDefinition> Worksheets { get; set; } = [];
 
     public CreateJsonCryptoPart CreateJsonPart(string dataType)

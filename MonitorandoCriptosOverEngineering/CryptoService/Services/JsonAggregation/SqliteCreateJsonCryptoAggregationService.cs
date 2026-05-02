@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CryptoService.Abstractions;
+using CryptoService.Contracts;
 using CryptoService.Messages;
 using CryptoService.Settings;
 using Microsoft.Data.Sqlite;
@@ -71,11 +72,18 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
         Guid reportId,
         IReadOnlyDictionary<CreateJsonDataType, CreateJsonPartState> parts)
     {
+        var pricePayload = ParsePayload(parts[CreateJsonDataType.Price].PayloadJson);
+        var tradePayload = ParsePayload(parts[CreateJsonDataType.Trade].PayloadJson);
+
         return new CreatedJsonCryptoReport
         {
             ReportId = reportId,
-            Price = ParsePayload(parts[CreateJsonDataType.Price].PayloadJson),
-            Trade = ParsePayload(parts[CreateJsonDataType.Trade].PayloadJson),
+            PriceRowCount = ResolveRowCount(pricePayload),
+            TradeRowCount = ResolveRowCount(tradePayload),
+            PricePreview = ResolvePreviewSummary(pricePayload),
+            TradePreview = ResolvePreviewSummary(tradePayload),
+            Price = pricePayload,
+            Trade = tradePayload,
             Spreadsheet = ParsePayload(parts[CreateJsonDataType.Spreadsheet].PayloadJson)
         };
     }
@@ -84,6 +92,52 @@ internal sealed class SqliteCreateJsonCryptoAggregationService(
     {
         using var document = JsonDocument.Parse(payload);
         return document.RootElement.Clone();
+    }
+
+    private static int ResolveRowCount(JsonElement payload)
+    {
+        if (!TryDeserializePayload(payload, out CreateXlsxCrypto? message) || message is null)
+        {
+            return 0;
+        }
+
+        if (message.PreviewSummary is not null)
+        {
+            return message.PreviewSummary.ConsolidatedRowCount;
+        }
+
+        return message.Worksheets
+            .FirstOrDefault()?
+            .Sections
+            .Sum(section => section.Rows.Count) ?? 0;
+    }
+
+    private static ReportPreviewSummary ResolvePreviewSummary(JsonElement payload)
+    {
+        if (!TryDeserializePayload(payload, out CreateXlsxCrypto? message) || message is null)
+        {
+            return new ReportPreviewSummary();
+        }
+
+        return message.PreviewSummary ?? new ReportPreviewSummary
+        {
+            RequestedCryptos = 0,
+            ConsolidatedRowCount = ResolveRowCount(payload)
+        };
+    }
+
+    private static bool TryDeserializePayload(JsonElement payload, out CreateXlsxCrypto? message)
+    {
+        try
+        {
+            message = payload.Deserialize<CreateXlsxCrypto>(JsonOptions);
+            return message is not null;
+        }
+        catch (JsonException)
+        {
+            message = null;
+            return false;
+        }
     }
 
     private static async Task EnsureSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
